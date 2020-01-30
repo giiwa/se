@@ -1,0 +1,9 @@
+package org.giiwa.ess.task;
+
+public interface Indexable {
+
+	public String[] getFields();
+
+	public String getId();
+
+}

@@ -1,0 +1,9 @@
+package org.giiwa.sees.base;
+
+public interface Indexable {
+
+	public String[] getFields();
+
+	public long getId();
+
+}

@@ -1,0 +1,60 @@
+package org.giiwa.ess.web;
+
+import org.apache.commons.configuration2.Configuration;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.giiwa.app.web.admin.setting;
+import org.giiwa.ess.base.SE;
+import org.giiwa.ess.task.IndexerTask;
+import org.giiwa.ess.web.admin.sees;
+import org.giiwa.framework.bean.License;
+import org.giiwa.framework.web.IListener;
+import org.giiwa.framework.web.Module;
+
+public class EssListener implements IListener {
+
+	static Log log = LogFactory.getLog(EssListener.class);
+
+	@Override
+	public void onInit(Configuration conf, Module m) {
+		// TODO Auto-generated method stub
+		log.info("webees is initing ...");
+
+		m.setLicense(License.LICENSE.licensed,
+				"FViqK8SlFwghyb16Hp5ferGHjVJ+YeKZ5lkm5DJoo9ZfH1TJqCCXD/IuCjAt2Hy0hzKQFa2X+Q2pJ/wv2kbzbYT5QZ8/Pgy0Y1pClqNbm8iz8+o9BHtKY0l5LNK4zlICFoxKdLDULvDcB9wm3pH+rRqmqPiw13z+lPw8eCP4648=");
+
+		SE.init();
+
+		setting.register("sees", sees.class);
+
+	}
+
+	@Override
+	public void onStart(Configuration conf, Module m) {
+		// TODO Auto-generated method stub
+		log.info("webees is starting ...");
+
+		IndexerTask.inst.schedule(1000);
+
+	}
+
+	@Override
+	public void onStop() {
+		// TODO Auto-generated method stub
+		log.info("webees is stopping ...");
+
+	}
+
+	@Override
+	public void uninstall(Configuration conf, Module m) {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
+	public void upgrade(Configuration conf, Module m) {
+		// TODO Auto-generated method stub
+
+	}
+
+}

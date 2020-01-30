@@ -1,0 +1,51 @@
+package org.giiwa.sees.base;
+
+import java.util.Collection;
+
+import org.giiwa.core.bean.X;
+import org.giiwa.core.bean.Helper.W;
+import org.giiwa.core.conf.Global;
+import org.giiwa.core.json.JSON;
+import org.junit.Test;
+
+public class SETest {
+
+	@Test
+	public void test() {
+		// Global.setConfig("es.url", "http://joe.mac:9200");
+		Global.setConfig("es.url", "http://g11:9200");
+
+		SE.init();
+
+		W q = W.create("no", "苏");
+		JSON jo = SE.search("car", new String[] { X.ID, "no" }, q, 0, 10, new String[] { "no" });
+
+		System.out.println(jo);
+
+		Collection<JSON> l2 = jo.getList("hits");
+		if (l2 != null) {
+			for (JSON j : l2) {
+				JSON j1 = (JSON) j.get("_source");
+				long id = j1.getLong("id");
+				String no = j1.getString("no");
+				System.out.println(id + "=" + no);
+			}
+		}
+
+		// SE.remove("car", 120);
+
+		String s = "{  'settings': {    'analysis': {      'analyzer': {        'my_analyzer': {          'tokenizer': 'my_tokenizer'        }      },      'tokenizer': {        'my_tokenizer': {          'type': 'ngram',          'min_gram': 3,          'max_gram': 3,          'token_chars': [            'letter',            'digit'          ]        }      }    }  }}";
+		jo = JSON.fromObject(s);
+//		System.out.println(jo.toPrettyString());
+
+		//define analyzer
+		s = "{'type': 'ngram','min_gram': 1,'token_chars': ['letter','digit']}";
+		SE.define("car_index2", JSON.create().append("name", "my_analyzer").append("tokenizer", JSON.fromObject(s)));
+		
+//		SE.setting("car_index", jo);
+
+		SE.analyze("car_index2", JSON.create().append("analyzer", "my_analyzer").append("text", "resource_already_exists_exception"));
+
+	}
+
+}

@@ -1,0 +1,37 @@
+package org.giiwa.sees.web.admin;
+
+import org.giiwa.core.bean.X;
+
+import java.util.Set;
+import java.util.TreeMap;
+
+import org.giiwa.core.bean.Helper.W;
+import org.giiwa.core.conf.Global;
+import org.giiwa.core.json.JSON;
+import org.giiwa.sees.base.SE;
+import org.giiwa.sees.task.IndexerTask;
+
+public class sees extends org.giiwa.app.web.admin.setting {
+
+	@Override
+	public void get() {
+		Set<String> l1 = IndexerTask.getTables();
+		TreeMap<String, Object> m1 = new TreeMap<String, Object>();
+		for (String s : l1) {
+			JSON j1 = SE.search(s, new String[] { X.ID }, W.create(), 0, 0, null);
+			m1.put(s, j1 == null ? -1 : j1.getLong("total"));
+		}
+		this.set("tables", m1);
+
+		this.settingPage("/admin/sees.setting.html");
+	}
+
+	@Override
+	public void set() {
+		Global.setConfig("es.url", this.getString("es.url"));
+
+		this.response(JSON.create().append(X.STATE, 201).append(X.MESSAGE, lang.get("save.success")));
+		return;
+	}
+
+}

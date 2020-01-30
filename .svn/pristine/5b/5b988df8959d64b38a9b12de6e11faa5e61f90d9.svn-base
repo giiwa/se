@@ -1,0 +1,24 @@
+package org.giiwa.sees.base;
+
+import org.giiwa.core.bean.X;
+import org.giiwa.core.bean.Helper.W;
+import org.giiwa.core.conf.Global;
+import org.giiwa.core.json.JSON;
+import org.junit.Test;
+
+public class SETest {
+
+	@Test
+	public void test() {
+		Global.setConfig("es.url", "http://joe.mac:9200");
+
+		SE.init();
+
+		W q = W.create();// "no", "a");
+		JSON jo = SE.search("car", new String[] { X.ID }, q, 0, 0, null);
+
+		System.out.println(jo);
+
+	}
+
+}

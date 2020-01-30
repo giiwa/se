@@ -1,0 +1,40 @@
+
+<div><label><h3>$lang.get('es.url'):</h3>
+	<input type='text' name='es.url' value="$!global.getString('es.url', '')" />
+	<g>$lang.get("es.url.hint")</g>
+</label></div>
+
+<table class='tablesorter nospace' border="0" cellpadding="0" cellspacing="1">
+	<thead>
+		<tr>
+			<th>Table</th>
+			<th>Indexed</th>
+			<th></th>
+		</tr>
+	</thead>
+	<tbody>
+#foreach($f in $tables.keySet())
+	<tr>
+		<td>$!f</td>
+		<td>$!tables.get($f)</td>
+		<td class='ip'>
+			<a href="javascript:;" onclick="_reset('$!f')">
+				<i class='icon-cancel-circle'></i>
+			</a>
+		</td>
+	</tr>
+#end
+	</tbody>
+</table>
+
+<script>
+function _reset(name) {
+	if(confirm("$lang.get('title.are_u_sure_delete')")) {
+		giiwa.processing.show();
+		$.post("/admin/sees/delete", {name:name}, function(d){
+			giiwa.processing.hide();
+			giiwa.hint(d.message);
+		})
+	}
+}
+</script>

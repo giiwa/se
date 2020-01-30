@@ -1,0 +1,163 @@
+package org.giiwa.ess.task;
+
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.locks.Lock;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.giiwa.core.bean.Bean;
+import org.giiwa.core.bean.BeanDAO;
+import org.giiwa.core.bean.Beans;
+import org.giiwa.core.bean.Helper.V;
+import org.giiwa.core.bean.Helper.W;
+import org.giiwa.core.bean.UID;
+import org.giiwa.core.bean.X;
+import org.giiwa.core.conf.Global;
+import org.giiwa.core.json.JSON;
+import org.giiwa.core.task.Callable;
+import org.giiwa.core.task.Task;
+import org.giiwa.ess.base.SE;
+
+public class IndexerTask extends Task {
+
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
+
+	private static Log log = LogFactory.getLog(IndexerTask.class);
+
+	@SuppressWarnings("rawtypes")
+	private static final Map<String, BeanDAO> tables = new HashMap<String, BeanDAO>();
+
+	public static IndexerTask inst = new IndexerTask();
+
+	private static long interval = X.AMINUTE;
+
+	public static Set<String> getTables() {
+		return tables.keySet();
+	}
+
+	@SuppressWarnings("rawtypes")
+	public static void add(String name, BeanDAO dao) {
+		tables.put(name, dao);
+	}
+
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	@Override
+	public void onExecute() {
+		interval = X.AMINUTE;
+
+		if (!SE.isOn())
+			return;
+
+		Lock door = Global.getLock("topic.index.door");
+		if (door.tryLock()) {
+			try {
+
+				for (String table : tables.keySet()) {
+					BeanDAO dao = tables.get(table);
+
+					Bean b0 = dao.load(W.create());
+					if (b0 instanceof Indexable) {
+						Indexable i = (Indexable) b0;
+						String[] ss = i.getFields();
+
+						if (ss == null || ss.length == 0)
+							continue;
+
+						long flag = UID.hash(Arrays.asList(ss).toString());
+						W q = W.create().and("_indexed", flag, W.OP.neq);
+
+						Beans<Bean> l1 = dao.load(q, 0, 100);
+						if (l1 != null && !l1.isEmpty()) {
+							for (Bean b : l1) {
+								_index(table, b, ss, flag, dao);
+								interval = 0;
+							}
+						}
+					}
+				}
+			} finally {
+				door.unlock();
+			}
+		}
+	}
+
+	@Override
+	public void onFinish() {
+		this.schedule(interval);
+	}
+
+	@SuppressWarnings("rawtypes")
+	private void _index(String name, Bean e, String[] ss, long flag, BeanDAO dao) {
+
+		JSON jo = JSON.create().append(X.ID, e.get(X.ID).toString());
+
+		for (String s : ss) {
+			if (!jo.has(s)) {
+				jo.append(s, e.getString(s));
+			}
+		}
+
+		SE.put(name, name, jo, new Callable<Integer, String>() {
+
+			@SuppressWarnings("unchecked")
+			@Override
+			public Integer call(int state, String id) {
+				return dao.update(id, V.create("_indexed", flag));
+			}
+		});
+	}
+
+	public static void cleanup(final String name, final W q, final int s) {
+
+		new Task() {
+
+			@Override
+			public String getName() {
+				return "indexer.cleanup.task." + name;
+			}
+
+			@SuppressWarnings({ "rawtypes", "unchecked" })
+			@Override
+			public void onExecute() {
+				int s1 = s;
+				final BeanDAO dao = tables.get(name);
+
+				if (dao != null) {
+
+					try {
+						JSON jo = SE.search(name, new String[] { X.ID }, q, s1, 1000, null);
+						log.debug("cleanup, jo=" + jo);
+
+						if (jo != null) {
+							Collection<JSON> l1 = jo.getList("hits");
+							if (l1 != null) {
+								for (JSON j1 : l1) {
+									String id = j1.getString("_id");
+									if (!dao.exists(id)) {
+										SE.remove(name, id);
+									}
+								}
+							}
+						}
+					} catch (Exception e) {
+						log.error(e.getMessage(), e);
+					}
+				}
+			}
+
+		}.schedule(0);
+	}
+
+	@SuppressWarnings("rawtypes")
+	public static BeanDAO getDAO(String tablename) {
+		return tables.get(tablename);
+	}
+
+}

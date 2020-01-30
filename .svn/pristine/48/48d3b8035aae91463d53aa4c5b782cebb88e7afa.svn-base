@@ -1,0 +1,38 @@
+
+<div class='head'>$lang.get('org.setting.title')</div>
+
+#parse('/widget/widget.message.html')
+
+<div class='tabs'>
+	<a href='/admin/org/setting' class="selected">$lang.get('a.org.setting')</a>
+</div>
+
+<form action='/admin/org/setting'  method='post' class='form' enctype="multipart/form-data">
+	
+	<div><label><h3>$lang.get('org.enabled'):</h3>
+		<input type='checkbox' name='org.enabled' #if($!global.getInt('org.enabled', 0)==1) checked="checked" #end />
+		<g>$lang.get("org.enabled.hint")</g>
+	</label></div>
+	
+	<div style="margin-left: 20px;"><label><h3>$lang.get('org.syncer'):</h3>
+		<select name="org.syncer" >
+			<option value="haikang" #if($global.getString('org.syncer', '') == 'haikang') selected="selected" #end>$lang.get('org.syncer_haikang')</option>
+		</select>
+	</label></div>
+
+	<div style="margin-left: 20px;"><label><h3>$lang.get('user.oauth'):</h3>
+		<input type='text' name='user.oauth' value="$!global.getString('user.oauth', '')"/>
+		<g>$lang.get("user.oauth.hint")</g>
+	</label></div>
+
+	<div style="margin-left: 20px;"><label><h3>$lang.get('org.sync.wsdl'):</h3>
+		<input type='text' name='org.sync.wsdl' value="$!global.getString('org.sync.wsdl', '')"/>
+		<g>$lang.get("org.sync.wsdl.hint")</g>
+	</label></div>
+
+	<div class='btns'>
+		<button type='submit'>$lang.get('btn.save')</button>
+	</div>
+	
+</form>
+

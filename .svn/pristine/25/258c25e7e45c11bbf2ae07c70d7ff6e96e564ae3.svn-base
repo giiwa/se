@@ -1,0 +1,38 @@
+package org.giiwa.sees.base;
+
+import java.util.Collection;
+
+import org.giiwa.core.bean.X;
+import org.giiwa.core.bean.Helper.W;
+import org.giiwa.core.conf.Global;
+import org.giiwa.core.json.JSON;
+import org.junit.Test;
+
+public class SETest {
+
+	@Test
+	public void test() {
+		Global.setConfig("es.url", "http://joe.mac:9200");
+
+		SE.init();
+
+		W q = W.create();// "no", "a");
+		JSON jo = SE.search("car", new String[] { X.ID, "no" }, q, 0, 10, new String[] { "no" });
+
+		System.out.println(jo);
+
+		Collection<JSON> l2 = jo.getList("hits");
+		if (l2 != null) {
+			for (JSON j : l2) {
+				JSON j1 = (JSON) j.get("_source");
+				long id = j1.getLong("id");
+				String no = j1.getString("no");
+				System.out.println(id + "=" + no);
+			}
+		}
+
+		// SE.remove("car", 120);
+
+	}
+
+}

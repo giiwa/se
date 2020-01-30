@@ -1,0 +1,26 @@
+package org.giiwa.sees.web.admin;
+
+import org.giiwa.core.bean.X;
+import org.giiwa.core.conf.Global;
+import org.giiwa.core.json.JSON;
+import org.giiwa.framework.web.Model;
+import org.giiwa.framework.web.Path;
+
+public class sees extends Model {
+
+	@Path(path = "setting", access = "access.config.admin")
+	public void setting() {
+		if (method.isPost()) {
+			Global.setConfig("org.enabled", X.isSame("on", this.getString("org.enabled")) ? 1 : 0);
+			Global.setConfig("org.syncer", this.getString("org.syncer"));
+			Global.setConfig("user.oauth", this.getString("user.oauth"));
+			Global.setConfig("org.sync.wsdl", this.getString("org.sync.wsdl"));
+
+			this.response(JSON.create().append(X.STATE, 201).append(X.MESSAGE, lang.get("save.success")));
+			return;
+		}
+
+		this.show("/admin/org.setting.html");
+	}
+
+}

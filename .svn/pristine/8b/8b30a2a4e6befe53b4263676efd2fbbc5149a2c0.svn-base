@@ -1,0 +1,699 @@
+package org.giiwa.ess.base;
+
+import org.giiwa.core.bean.TimeStamp;
+import org.giiwa.core.bean.X;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.giiwa.core.bean.BeanDAO;
+import org.giiwa.core.bean.Helper;
+import org.giiwa.core.bean.Helper.V;
+import org.giiwa.core.bean.Helper.W;
+import org.giiwa.core.bean.Helper.W.Entity;
+import org.giiwa.core.conf.Global;
+import org.giiwa.core.json.JSON;
+import org.giiwa.core.net.Http;
+import org.giiwa.core.task.Callable2;
+import org.giiwa.core.task.LiveHand;
+import org.giiwa.core.task.Task;
+import org.giiwa.ess.task.IndexerTask;
+import org.giiwa.framework.bean.Data;
+import org.giiwa.framework.bean.GLog;
+import org.giiwa.framework.web.Language;
+
+public class SE {
+
+	static Log log = LogFactory.getLog(SE.class);
+
+	private static String server = null;
+	public static SE inst = new SE();
+
+	private static LiveHand putter;
+
+	public static boolean isOn() {
+		return Global.getInt("es.enabled", 0) == 1;
+	}
+
+	public static void init() {
+		if (server == null) {
+			server = Global.getString("es.url", null);
+			putter = new LiveHand(-1, 20);
+		}
+	}
+
+	/**
+	 * search data, used by js
+	 * 
+	 * @param db
+	 * @param tablename
+	 * @param cols,     etc, :"aa,bbb"
+	 * @param q
+	 * @param s
+	 * @param n
+	 * @return
+	 */
+	public JSON search(String db, String tablename, String cols, W q, int s, int n) {
+		String[] ss = X.split(cols, "[,]");
+		return search(db, tablename, ss, q, s, n, ss);
+	}
+
+	/**
+	 * count the hits
+	 * 
+	 * @param db
+	 * @param tablename
+	 * @param id
+	 * @param hits
+	 * 
+	 */
+	public void hits(String db, String tablename, String key, List<JSON> hits) {
+		for (JSON j1 : hits) {
+			String id = j1.getString("_id");
+			W q = W.create(X.ID, id);
+			Data d = Data.load(tablename, q);
+			if (d == null) {
+				// remove
+				remove(db, tablename, id);
+			} else {
+				// refresh the data
+				Helper.inc(tablename, q, "_hit", 1, null);
+			}
+		}
+	}
+
+	/**
+	 * 
+	 * @param db
+	 * @param tablename
+	 * @param cols
+	 * @param q
+	 * @param s
+	 * @param n
+	 * @param highlights
+	 * @return
+	 */
+	public JSON search(String db, String tablename, String[] cols, W q, int s, int n, String[] highlights) {
+		if (X.isEmpty(server)) {
+			log.error("SE not init yet.");
+			return null;
+		}
+
+		TimeStamp t = TimeStamp.create();
+
+		String url = server + "/" + (X.isEmpty(db) ? X.EMPTY : (db + "_")) + tablename + "/_search";
+		JSON query = JSON.create();
+		query.put("query", _query(q));
+
+		log.debug("search, q=" + q + ", query=" + query);
+
+		if (highlights != null) {
+			JSON hf = JSON.create();
+			for (String col : highlights) {
+				hf.append(col, JSON.create());
+			}
+			query.append("highlight", JSON.create().append("fields", hf));
+		}
+
+		query.put("sort", _sort(q));
+		JSON agg = _agg(cols, q == null ? null : q.groupby(), n);
+		if (agg != null && !agg.isEmpty()) {
+			query.put("aggs", agg);
+			query.put("size", 0);
+			query.put("from", 0);
+		} else {
+			query.put("from", s);
+			query.put("size", n);
+		}
+
+		log.debug("db=" + db + ", tablename=" + tablename + ", query=" + query.toString());
+//		System.out.println("db=" + db + ", tablename=" + tablename + ", query=" + query.toString());
+
+		Http h = Http.create();
+		try {
+			Http.Response r = h.post(url, JSON.create().append("Content-Type", "application/json"), query.toString(),
+					X.AMINUTE);
+
+			log.info("query - cost: " + t.past() + ", db=" + db + ", tablename=" + tablename + ", query=" + query
+					+ ", resp=" + r.body);
+
+//		System.out.println("query - cost: " + t.past() + ", db=" + db + ", tablename=" + tablename + ", query=" + query
+//				+ ", resp=" + r.body);
+
+			if (r.status == 200) {
+				JSON j = JSON.fromObject(r.body);
+				JSON j1 = null;
+				if (agg == null || agg.isEmpty()) {
+					j1 = JSON.fromObject(j.get("hits")).append("cost", t.past());
+					if (j1 != null && j1.containsKey("hits")) {
+
+						List<JSON> l2 = JSON.createList();
+						List<JSON> l1 = j1.getList("hits");
+						for (JSON j2 : l1) {
+
+							JSON s1 = (JSON) j2.get("_source");
+							if (s1 != null && !s1.isEmpty()) {
+								for (String name : s1.keySet()) {
+									Object v = s1.get(name);
+									v = Language.getLanguage().truncate(v, 200);
+									s1.put(name, v);
+								}
+
+								JSON h1 = (JSON) j2.get("highlight");
+								if (h1 != null && !h1.isEmpty()) {
+									if (s1 != null) {
+										for (String name : h1.keySet()) {
+											s1.put(name, ((List<?>) h1.get(name)).get(0));
+										}
+									}
+								}
+								l2.add(s1);
+							}
+						}
+						j1.append("hits", l2);
+					}
+				} else {
+					j1 = JSON.fromObject(_convertAgg((JSON) j.get("aggregations"))).append("cost", t.past());
+				}
+				log.debug("j1=" + j1);
+				return j1;
+			}
+		} finally {
+			h.close();
+		}
+
+		return null;
+
+	}
+
+	private JSON _agg(String[] cols, String groupby, int n) {
+
+		JSON a = null;
+		if (cols != null && cols.length > 0) {
+			for (String s : cols) {
+				if (s.indexOf("(") > 0) {
+					String[] ss = X.split(s, "[\\(\\)]");
+					if (ss != null && ss.length == 2) {
+						if (a == null) {
+							a = JSON.create();
+						}
+						String f = ss[1];
+						if (X.isSame(f, "*")) {
+							f = "_id";
+						}
+						a.append(ss[0] + "_" + ss[1], JSON.create().append(ss[0], JSON.create().append("field", f)));
+					}
+				}
+			}
+		}
+
+		if (X.isEmpty(groupby)) {
+			return a;
+		} else {
+			String[] ss = X.split(groupby, ",");
+			JSON g = JSON.create();
+			JSON r = g;
+			for (String s : ss) {
+				JSON j = JSON.create();
+				g.append(s, j);
+				// g.append(s + "_s", j);
+				j.append("terms", JSON.create().append("field", s).append("size", n));
+				j.append("aggs", JSON.create());
+				// j.append(s, JSON.create().append("terms",
+				// JSON.create().append("field", s)));
+				g = (JSON) j.get("aggs");
+			}
+			if (a != null) {
+				g.putAll(a);
+			}
+			return r;
+		}
+
+	}
+
+	private List<JSON> _sort(W q) {
+
+		List<JSON> sort = new ArrayList<JSON>();
+		if (q != null) {
+			List<Entity> l1 = q.getOrder();
+			if (!X.isEmpty(l1)) {
+				for (Entity e : l1) {
+					Object v = e.value;
+					JSON j1 = JSON.create().append(e.name.toLowerCase(),
+							JSON.create().append("order", 1 == X.toInt(v) ? "asc" : "desc"));
+					sort.add(j1);
+				}
+			}
+		}
+
+		return sort;
+	}
+
+	private JSON _query(W q) {
+		if (q == null)
+			return JSON.create();
+
+		List<JSON> must = new ArrayList<JSON>();
+		List<JSON> must_not = new ArrayList<JSON>();
+		List<JSON> should = new ArrayList<JSON>();
+
+		List<Entity> l1 = q.getList();
+		if (!X.isEmpty(l1)) {
+			for (Entity e : l1) {
+				Object v = e.value;
+				if (v instanceof String) {
+					v = v.toString();
+				}
+
+				String[] vv = X.split(v.toString(), "[ ,;；。]");
+				for (String s1 : vv) {
+					JSON j1 = JSON.create();
+
+					if (e.op == W.OP.neq) {
+						if (v instanceof String) {
+							j1.append("match_phrase", JSON.create().append(e.name, JSON.create().append("query", s1)));
+						} else {
+							j1.append("term", JSON.create().append(e.name, s1));
+						}
+						must_not.add(j1);
+					} else {
+						if (e.op == W.OP.eq || e.op == W.OP.like) {
+							if (v instanceof String) {
+								j1.append("match_phrase",
+										JSON.create().append(e.name, JSON.create().append("query", s1)));
+							} else {
+								j1.append("term", JSON.create().append(e.name, s1));
+							}
+						} else if (e.op == W.OP.gt) {
+							j1.append("range", JSON.create().append(e.name, JSON.create().append("gt", s1)));
+						} else if (e.op == W.OP.gte) {
+							j1.append("range", JSON.create().append(e.name, JSON.create().append("gte", s1)));
+						} else if (e.op == W.OP.lt) {
+							j1.append("range", JSON.create().append(e.name, JSON.create().append("lt", s1)));
+						} else if (e.op == W.OP.lte) {
+							j1.append("range", JSON.create().append(e.name, JSON.create().append("lte", s1)));
+						}
+
+						if (e.cond == W.AND) {
+							must.add(j1);
+						} else {
+							should.add(j1);
+						}
+					}
+				}
+			}
+		}
+
+		List<W> l2 = q.getW();
+		if (!X.isEmpty(l2)) {
+			for (W e : l2) {
+				JSON j1 = _query(e);
+				if (e.getCondition() == W.AND) {
+					must.add(j1);
+				} else {
+					should.add(j1);
+				}
+			}
+		}
+
+		if (must.size() == 1 && !should.isEmpty()) {
+			// move to should
+			should.add(0, must.remove(0));
+		}
+
+		JSON j2 = JSON.create();
+		j2.append("must", must);
+		j2.append("should", should);
+		j2.append("must_not", must_not);
+		return JSON.create().append("bool", j2);
+	}
+
+	private JSON _convertAgg(JSON agg) {
+		if (agg == null || agg.isEmpty())
+			return null;
+
+		JSON jo = JSON.create();
+		for (String name : agg.keySet()) {
+			Object o = agg.get(name);
+			if (o instanceof JSON) {
+				JSON t = (JSON) o;
+				if (t.containsKey("buckets")) {
+					jo.put(name, _buckets(t.getList("buckets"), name));
+				} else {
+					for (String k : t.keySet()) {
+						if (X.isSame(k, "value")) {
+							jo.put(X.split(name, "_")[0], t.get(k));
+						} else {
+							jo.put(k, t.get(k));
+						}
+					}
+				}
+			} else {
+				jo.put(name, o);
+			}
+		}
+		// System.out.println(jo);
+
+		List<JSON> l1 = new ArrayList<JSON>();
+		l1.add(jo);
+		return JSON.create().append("stats", _expand(l1));
+	}
+
+	private List<JSON> _expand(List<JSON> l1) {
+		for (int i = 0; i < l1.size(); i++) {
+			JSON j1 = l1.get(i);
+			for (String name : j1.keySet()) {
+				Object o = j1.get(name);
+				if (o instanceof List) {
+					// remove it and expand
+					List<JSON> l2 = _expand(j1, name);
+					if (l2 != null && !l2.isEmpty()) {
+						l1.addAll(l2);
+						l1.remove(i);
+						i--;
+						break;
+					}
+				}
+			}
+		}
+		return l1;
+	}
+
+	private List<JSON> _buckets(Collection<JSON> l1, String n0) {
+		if (l1 == null || l1.isEmpty())
+			return null;
+
+		List<JSON> l2 = new ArrayList<JSON>(l1.size());
+		for (JSON j1 : l1) {
+			JSON j2 = JSON.create();
+			j2.put(n0, j1.get("key"));
+			j2.put("count", j1.get("doc_count"));
+			for (String name : j1.keySet()) {
+				Object o = j1.get(name);
+				if (o instanceof JSON) {
+					JSON t = (JSON) o;
+					if (t.containsKey("buckets")) {
+						j2.put(name, _buckets(t.getList("buckets"), name));
+					} else {
+						for (String s1 : t.keySet()) {
+							if (X.isSame(s1, "value")) {
+								j2.put(X.split(name, "_")[0], t.get(s1));
+							} else {
+								j2.put(s1, t.get(s1));
+							}
+						}
+					}
+				}
+			}
+			l2.add(j2);
+		}
+
+		return l2;
+	}
+
+	@SuppressWarnings("unchecked")
+	private List<JSON> _expand(JSON j1, String name) {
+		// System.out.println(j1);
+
+		Object o = j1.get(name);
+		if (o instanceof List) {
+			// expand
+			List<JSON> l2 = (List<JSON>) o;
+
+			List<JSON> l1 = new ArrayList<JSON>(l2.size());
+			for (JSON j2 : l2) {
+				JSON j3 = JSON.create(j1);
+				j3.remove(name);
+				for (String s2 : j2.keySet()) {
+					Object o2 = j2.get(s2);
+					if (o2 instanceof List) {
+						j3.put(s2, o2);
+					} else {
+						j3.put(s2, o2);
+					}
+				}
+				l1.add(j3);
+			}
+			return l1;
+		} else {
+			return Arrays.asList(j1);
+		}
+	}
+
+	public int put(String db, String tablename, JSON doc, Callable2<String, String> cb) {
+
+		if (X.isEmpty(server)) {
+			log.error("SE not init yet.");
+			return 0;
+		}
+
+		try {
+			putter.hold();
+			Task.schedule(() -> {
+
+				String id = doc.getString(X.ID);
+
+				Http h = Http.create();
+				try {
+					Http.Response r = h.put(
+							server + "/" + (X.isEmpty(db) ? X.EMPTY : (db + "_")) + tablename + "/_doc/" + id,
+							JSON.create().append("Content-Type", "application/json"), doc.toString(), X.AMINUTE);
+
+					if (r.status == 200 || r.status == 201) {
+						if (cb != null) {
+							JSON j1 = JSON.fromObject(r.body);
+							cb.call(j1.getString("result"), id);
+						}
+					} else {
+						log.error("status=" + r.status + ", " + r.body);
+						if (cb != null) {
+							cb.call(r.body, id);
+						}
+					}
+				} finally {
+					putter.drop();
+					h.close();
+				}
+
+			});
+
+		} catch (Exception e) {
+			log.error(e.getMessage(), e);
+
+			GLog.applog.error("se", "put", doc.toString(), e, null, null);
+		}
+
+		return 0;
+
+	}
+
+	/**
+	 * @deprecated
+	 * @param db
+	 * @param tablename
+	 * @param q
+	 * @return
+	 */
+	public List<String> remove(String db, String tablename, W q) {
+		if (X.isEmpty(server)) {
+			log.error("SE not init yet.");
+			return null;
+		}
+
+		List<String> ids = new ArrayList<String>();
+		TimeStamp t = TimeStamp.create();
+		JSON jo = search(db, tablename, new String[] { X.ID }, q, 0, 100, null);
+		while (jo != null && jo.getLong("total", 0) > 0) {
+			Collection<JSON> list = jo.getList("list");
+			if (list == null || list.isEmpty()) {
+				break;
+			}
+			for (JSON j : list) {
+				String id = j.getString(X.ID);
+				ids.add(id);
+				Http.owner.delete(server + "/" + (X.isEmpty(db) ? X.EMPTY : (db + "_")) + tablename + "/" + id,
+						JSON.create());
+			}
+			jo = search(db, tablename, new String[] { X.ID }, q, 0, 100, null);
+
+		}
+		log.info("delete - cost: " + t.pastms() + "ms, tablename=" + tablename + ", q=" + q);
+
+		return ids;
+	}
+
+	public boolean remove(String db, String tablename, String id) {
+		Http.Response r = Http.owner
+				.delete(server + "/" + (X.isEmpty(db) ? X.EMPTY : (db + "_")) + tablename + "/" + id, JSON.create());
+		log.debug("delete, table=" + tablename + ", id=" + id + ", resp=" + r.body);
+		return true;
+	}
+
+	public JSON stat(String db, String tablename, String[] cols, W q, int n) {
+
+		if (X.isEmpty(server)) {
+			log.error("SE not init yet.");
+			return null;
+		}
+
+		String url = server + "/" + (X.isEmpty(db) ? X.EMPTY : (db + "_")) + tablename + "/_search";
+		JSON query = JSON.create();
+		query.put("query", _query(q));
+
+		JSON agg = _agg(cols, q == null ? null : q.groupby(), n);
+		if (agg != null && !agg.isEmpty()) {
+			query.put("aggs", agg);
+			query.put("size", 0);
+		}
+
+		log.debug("db=" + db + ", tablename=" + tablename + ", query=" + query);
+		System.out.println("db=" + db + ", tablename=" + tablename + ", query=" + query);
+
+		TimeStamp t = TimeStamp.create();
+		Http.Response r = Http.owner.post(url, query);
+
+		System.out.println(r.status);
+		System.out.println(r.body);
+		log.info("query - cost: " + t.pastms() + "ms, db=" + db + ", tablename=" + tablename + ", query=" + query
+				+ ", resp=" + r.body);
+
+		if (r.status == 200) {
+			JSON j = JSON.fromObject(r.body);
+			if (agg == null || agg.isEmpty()) {
+				return (JSON) j.get("hits");
+			} else {
+				return _convertAgg((JSON) j.get("aggregations"));
+			}
+		}
+
+		return null;
+
+	}
+
+	public void fielddata(String db, String tablename, String col, boolean enabled) {
+		if (X.isEmpty(server)) {
+			log.error("SE not init yet.");
+			return;
+		}
+
+		String url = server + "/" + (X.isEmpty(db) ? X.EMPTY : (db + "_")) + tablename + "/_mapping";
+
+		JSON m = JSON.create();
+		m.append("properties",
+				JSON.create().append(col, JSON.create().append("type", "text").append("fielddata", enabled)));
+		Http.Response r = Http.owner.put(url, m);
+
+		System.out.println(r.status);
+		System.out.println(r.body);
+
+	}
+
+	public void cleanup(String db, String name, W q, int s) {
+		IndexerTask.cleanup(db, name, q, s);
+	}
+
+	public void mapping(String db, String tablename, JSON a) {
+		if (X.isEmpty(server)) {
+			log.error("SE not init yet.");
+			return;
+		}
+
+		String url = server + "/" + (X.isEmpty(db) ? X.EMPTY : (db + "_")) + tablename + "/_mapping";
+
+		Http.Response r = Http.owner.post(url, JSON.create().append("Content-Type", "application/json"), a.toString(),
+				X.AMINUTE);
+
+		log.debug("status=" + r.status + ", body=" + r.body);
+
+	}
+
+	public void define(String db, String tablename, JSON a) {
+		if (X.isEmpty(server)) {
+			log.error("SE not init yet.");
+			return;
+		}
+
+		if (!a.containsKey("name")) {
+			log.error("name missed in analizer.");
+			return;
+		}
+		if (!a.containsKey("tokenizer")) {
+			log.error("tokenizer missed in analizer.");
+			return;
+		}
+
+		String name = a.getString("name");
+
+		// remove index first
+
+		JSON config = JSON.create().append("settings",
+				JSON.create().append("analysis", JSON.create()
+						.append("analyzer",
+								JSON.create().append(name, JSON.create().append("tokenizer", name + "_tokenizer")))
+						.append("tokenizer", JSON.create().append(name + "_tokenizer", a.get("tokenizer")))));
+
+		String url = server + "/" + (X.isEmpty(db) ? X.EMPTY : (db + "_")) + tablename;
+
+		Http.Response r = Http.owner.put(url, config);
+
+		System.out.println(r.status);
+		System.out.println(r.body);
+	}
+
+	public void analyze(String db, String tablename, JSON jo) {
+		if (X.isEmpty(server)) {
+			log.error("SE not init yet.");
+			return;
+		}
+
+		String url = server + "/" + (X.isEmpty(db) ? X.EMPTY : (db + "_")) + tablename + "/_analyze";
+
+		Http.Response r = Http.owner.post(url, jo);
+
+		System.out.println(r.status);
+		System.out.println(r.body);
+	}
+
+	@SuppressWarnings("rawtypes")
+	public void reset(String db, String tablename) {
+		if (X.isEmpty(server)) {
+			log.error("SE not init yet.");
+			return;
+		}
+
+		BeanDAO dao = IndexerTask.getDAO(db);
+		if (dao == null) {
+			log.error("not DAO for [" + db + "]");
+			// return;
+		}
+
+		String url = server + "/" + (X.isEmpty(db) ? X.EMPTY : (db + "_")) + tablename;
+
+		Http.Response r = Http.owner.delete(url, JSON.create());
+
+		System.out.println("r=" + r.status);
+		// System.out.println("reset_body=" + r.body);
+		dao.update(W.create(), V.create("_indexed", 0));
+
+		IndexerTask.inst.schedule(0);
+
+	}
+
+	@SuppressWarnings("static-access")
+	public static void main(String[] args) {
+
+		SE.inst.server = "http://192.168.1.10:9200";
+
+		W q = W.create();
+		q.and("reporterName", "王");
+
+		JSON j1 = SE.inst.search("", "test", "reporterName", q, 0, 10);
+		System.out.println(j1);
+
+	}
+
+}

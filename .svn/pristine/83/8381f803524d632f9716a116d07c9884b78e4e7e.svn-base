@@ -1,0 +1,88 @@
+<style>
+td.ip a {
+    text-decoration: none;
+    color: #aaa;
+}
+td.ip a:hover{
+	color: #4ea6ff;
+}
+</style>
+
+<div><label><h3>$lang.get('es.enabled'):</h3>
+	<input type='checkbox' name='es.enabled' #if($global.getInt('es.enabled', 0)==1) checked="checked" #end/>
+	<g>$lang.get("es.enabled.hint")</g>
+</label></div>
+
+<div><label><h3>$lang.get('es.url'):</h3>
+	<input type='text' name='es.url' value="$!global.getString('es.url', '')" />
+	<g>$lang.get("es.url.hint")</g>
+</label></div>
+
+<div><label><h3>$lang.get('es.group'):</h3>
+	<input type='text' name='es.group' value="$!global.getString('es.group', '')" />
+	<g>$lang.get("es.group.hint")</g>
+</label></div>
+
+<div><label><h3>$lang.get('es.index.time'):</h3>
+	<input type='text' name='es.index.time' value="$!global.getString('es.index.time', '23:00-06:00')" />
+	<g>$lang.get("es.index.time.hint")</g>
+</label></div>
+
+<table class='tablesorter nospace' border="0" cellpadding="0" cellspacing="1">
+	<thead>
+		<tr>
+			<th>Health</th>
+			<th>Status</th>
+			<th>Index</th>
+			<th>UUID</th>
+			<th>Pri</th>
+			<th>Rep</th>
+			<th>Count</th>
+			<th>Deleted</th>
+			<th>Size</th>
+			<th>Pri.Size</th>
+			<th>Shards</th>
+			<th>Max.R</th>
+			<th></th>
+		</tr>
+	</thead>
+	<tbody>
+#foreach($f in $list)
+	<tr>
+		<td>
+			#if($f.health == 'yellow')
+			<span style="height: 100%;width: 100%;display: inline-block;background: yellow;text-align: center;">$!f.health</span>
+			#else
+			<span style="color:white; height: 100%;width: 100%;display: inline-block;background: $!f.health;text-align: center;">$!f.health</span>
+			#end
+		</td>
+		<td>$!f.status</td>
+		<td>$!f.index</td>
+		<td>$!f.uuid</td>
+		<td>$!f.pri</td>
+		<td>$!f.rep</td>
+		<td>$!f.count</td>
+		<td>$!f.deleted</td>
+		<td>$!f.size</td>
+		<td>$!f.psize</td>
+		<td>$!f.settings.index.number_of_shards</td>
+		<td>$!f.settings.index.max_result_window</td>
+		<td class='a'>
+			<a class="hint hint--bottom" data-hint="$lang.get('a.reset')" href="javascript:;" onclick="_reset('$f.index')"><i class='icon-cancel-circle'></i></a>
+		</td>
+	</tr>
+#end
+	</tbody>
+</table>
+
+<script>
+function _reset(name) {
+	if(confirm("$lang.get('title.are_u_sure_delete')")) {
+		giiwa.processing.show();
+		$.post("/admin/ess/delete", {name:name}, function(d){
+			giiwa.processing.hide();
+			giiwa.hint(d.message);
+		})
+	}
+}
+</script>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<module version="1.0">
+  <id>129</id>
+  <name>ess</name>
+  <package>org.giiwa.ess.web</package>
+  <version>1.1</version>
+  <build>0</build>
+  <enabled>true</enabled>
+  <readme>Search Engine</readme>
+  <listener>
+    <!--add module listener here, please refer IListener interface-->
+    <class>org.giiwa.ess.web.EssListener</class>
+  </listener>
+  <filter>
+    <!--TODO, please refer web.IFilter, eg. <pattern>/user/login</pattern>,<class>org.giiwa.demo.web.UserFiler</class>-->
+  </filter>
+  <required>
+    <!--add all required modules here-->
+    <module name="default" minversion="1.5.1804031240" maxversion="1.5.*"/>
+  </required>
+  <key>MIICdQIBADANBgkqhkiG9w0BAQEFAASCAl8wggJbAgEAAoGBAI45q/n00IcmDrbg2fKrZWN5S4KXA/GV/iV092miuOYh2xeK+m0PaQZlN3o9ZuYrS00E/q9Re6QKfzo0S1gotcmXPi+dIQ/jXe/QCNn+5qi0BhQGzmYbX1izXIaLmI+aoLFKlUYQuYpYVa+bEgGM/A0ZqqpqW71DWPcxSDPZ+oqxAgMBAAECgYB6r/lQmAVCcGwFChY4pe3CT6H5tvfp8O/Zs/qxn3NM4iuzNWotpjt9Dtc6lbksGHDOsd5ZsjqsGXoC5ZWRKR0WzjIlUAcSu8o2zZa0N2410PVd7mFIbVfGZvCC2FR36hDbH+tS5E+HldeKMa/jOgFglLxhExOZ20J/GkGFwU0HoQJBAL8cQg0V+eriFL+AOIC7gf+s4kDfqg/eKE0pGE7xM1comwZt7rIwsbK8ESRqXZhgtO2qBUsqoap01ukrsWLnABUCQQC+hDYYag7P5bk2WMlHBYiucoDYunTwhkC3Pkykf6fWbOWVg+Ufi3IqmUQAbAIibhF+lZkbONZ7s09YSuD77CstAkAObz316xEDUqwqgq7B2mfJPe+g4sPfivIUUeRKIiG0lZaP98Gtp8vkKhxJWddT6QoBYXQg50lqrISG/Avb4oK5AkAxTwK5OunugOR43m3pxdLkY5pZfZi6j+S8CJHJmYiVBMY+9k4c5fh8cgKZoVrEEnzQqGNiGknY5kXI8khcq3lZAkAxAeAkWNwOyD2F2y5JvMyejzc/LLD7Wrv/rmnSh08hgWuolXFODjTGAGLnLqW9aI9ZJ6EcxS2JtH18XkR8uC2q</key>
+</module>

@@ -1,0 +1,5 @@
+a.setting.sees=ES设置
+sees.setting.title=搜索引擎设备
+es.url=ES服务
+es.url.hint=ES服务连接，eg. http://g10:9200
+delete.success=已经删除，请稍后刷新
